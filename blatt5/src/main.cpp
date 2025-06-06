@@ -6,102 +6,96 @@ Servo servo1;
 Servo servo2;
 
 DueTimer Timer3;
-DueTimer Timer4;
-DueTimer Timer5;
+DueTimer Timer1;
+DueTimer Timer7;
+DueTimer Timer8;
 
 const int button_press_length = 40;
 
-int positions[64];
-uint positions_count = 0;
+const uint max_positions = 32;
+
+int positions[max_positions];
+int positions_count = 0;
 
 int j_x_pos = 0;
 int j_y_pos = 0;
 
 bool led = false;
 
-int button12counter;
-bool button12_low;
-bool button12;
-void timer5ISR() {
-    button12counter = 0;
-    Timer5.start();
-    Serial.println("button 12 low");
-}
+bool live_mode = true;
 
 void button12_pressed() {
-    button12_low = false;
-    Timer5.stop();
-    button12 = true;
-    Serial.println("button 12 pressed");
+    Serial.println("Position recorded");
     positions[positions_count++] = j_x_pos;
     positions[positions_count++] = j_y_pos;
-    if (positions_count == 63) {
+    if (positions_count == max_positions - 1) {
         positions_count = 0;
         Serial.print("max positions recorded");
     }
 }
 
-void timer5Routine() {
-    Serial.println("timer5 routine");
-    int button = digitalRead(12);
-    //Serial.println(button == HIGH ? "HIGH" : "LOW");
-    if (button == LOW || button12_low && button == HIGH) {
-        button12counter += 10;
+int replay_timer_i;
+int target_pos_x;
+int target_pos_y;
+double x_step;
+double y_step;
+double nextx;
+double nexty;
+const int replay_rate = 100;
+int counter = 0;
+void replay_timer_routine() {
+    if (replay_timer_i >= positions_count) {
+        Timer8.stop();
+        live_mode = true;
+        Serial.println("Live mode");
     } else {
-        Timer5.stop();
-        //Serial.println("Faulty press 3");
-    }
-    if (button12counter >= button_press_length) {
-        if (button12_low) {
-            button12_pressed();
-        } else {
-            button12counter = 0;
-            button12_low = true;
+        if (counter == replay_rate) {
+            replay_timer_i += 2;
+            target_pos_x = positions[replay_timer_i];
+            target_pos_y = positions[replay_timer_i + 1];
+            x_step = double(servo1.read() - target_pos_x) / replay_rate;
+            y_step = double(servo2.read() - target_pos_y) / replay_rate;
+            Serial.print(x_step);
+            Serial.print(" ");
+            Serial.println(y_step);
+            counter = 0;
         }
+        nextx += x_step;
+        nexty += y_step;
+        while (abs(nextx) >= 1) {
+            j_x_pos += 1;
+            nextx -= nextx > 0 ? 1 : -1;
+        }
+        while (abs(nexty) >= 1) {
+            j_y_pos += 1;
+            nexty -= nexty > 0 ? 1 : -1;
+        }
+        counter++;
     }
 }
 
-bool button11_low;
-uint32_t button11counter;
-bool button11 = false;
-
-void timer4ISR() {
-    button11counter = 0;
-    Timer4.start();
-    Serial.println("button 11 low");
-}
-
-void button4_pressed() {
-    Serial.println("button 4 pressed");
-    button11_low = false;
-    Timer4.stop();
-    button11 = true;
-    for (int i = 0; i < 64; i++) {
+void button11_pressed() {
+    Serial.println("Replay mode");
+    for (int i = 0; i < positions_count; i++) {
         Serial.print("[");
         Serial.print(positions[i]);
+        Serial.print(", ");
         Serial.print(positions[++i]);
         Serial.print("], ");
     }
+    replay_timer_i = 0;
+    counter = 0;
+    live_mode = false;
+    target_pos_x = positions[replay_timer_i];
+    target_pos_y = positions[replay_timer_i + 1];
+    x_step = double(servo1.read() - target_pos_x) / replay_rate;
+    y_step = double(servo2.read() - target_pos_y) / replay_rate;
+    nextx = 0;
+    nexty = 0;
+    Timer8.start();
 }
 
-void timer4Routine() {
-    Serial.println("timer4 routine");
-    int button = digitalRead(4);
-    //Serial.println(button == HIGH ? "HIGH" : "LOW");
-    if (button == LOW || button11_low && button == HIGH) {
-        button11counter += 10;
-    } else {
-        Timer4.stop();
-    }
-    if (button11counter >= button_press_length) {
-        if (button11_low) {
-            button4_pressed();
-        } else {
-            button11counter = 0;
-            button11_low = true;
-        }
-    }
-}
+
 
 void timer_routine() {
     uint32_t joystick_x = analogRead(A8);
@@ -109,12 +103,15 @@ void timer_routine() {
     float jx_abs = (float)(float(joystick_x) - 512) / 512;
     float jy_abs = (float)(float(joystick_y) - 512) / 512;
 
-    if (jx_abs == 0 && jy_abs == 0) {
+    if (!(abs(joystick_x - 512) < 128 && abs(joystick_y - 512) < 128)) {
+        if (live_mode) {
+            j_x_pos += int(jx_abs * 18);
+            j_y_pos += int(jy_abs * 18);
+        }
+    } else {
         Timer3.stop();
     }
 
-    j_x_pos += int(jx_abs * 18);
-    j_y_pos += int(jy_abs * 18);
 }
 
 void timer3_start_isr() {
@@ -123,6 +120,45 @@ void timer3_start_isr() {
 
 void led_toggle() {
     led = !led;
+}
+
+uint button11 = 0;
+bool button11_low = false;
+uint button12 = 0;
+bool button12_low = false;
+uint sel = 0;
+
+void button_timer_routine() {
+    int button11_state = digitalRead(11);
+    if (button11_state == LOW || button11_state == HIGH && button11_low) {
+        button11 += 10;
+    } else {
+        button11_low = false;
+    }
+    if (button11 >= button_press_length) {
+        Timer7.stop();
+
+        button11 = 0;
+        button11_low = false;
+        button11_pressed();
+    }
+    int button12_state = digitalRead(12);
+    if (button12_state == LOW || button12_state == HIGH && button11_low) {
+        button12 += 10;
+    } else {
+        button12_low = false;
+    }
+    if (button12 >= button_press_length) {
+        Timer7.stop();
+
+        button12 = 0;
+        button12_low = false;
+        button12_pressed();
+    }
+}
+
+void button_isr() {
+    Timer7.start();
 }
 
 void setup() {
@@ -141,16 +177,20 @@ void setup() {
     pinMode(A8, INPUT); //Joystick XOUT
     pinMode(A9, INPUT); //Joystick YOUT
 
-    if (!Timer3.configure(10, timer_routine) || !Timer4.configure(100, timer4Routine) || !Timer5.configure(100, timer5Routine)) {
+    if (!Timer3.configure(10, timer_routine) || !Timer7.configure(100, button_timer_routine) || !Timer8.configure(replay_rate, replay_timer_routine)) {
         Serial.println("Timer configuration failed");
     };
 
     attachInterrupt(digitalPinToInterrupt(A8), timer3_start_isr, RISING);
     attachInterrupt(digitalPinToInterrupt(A9), timer3_start_isr, RISING);
     attachInterrupt(digitalPinToInterrupt(18), led_toggle, FALLING);
-    attachInterrupt(digitalPinToInterrupt(11), timer4ISR, FALLING);
-    attachInterrupt(digitalPinToInterrupt(12), timer5ISR, FALLING);
+    attachInterrupt(digitalPinToInterrupt(11), button_isr, FALLING);
+    attachInterrupt(digitalPinToInterrupt(12), button_isr, FALLING);
+    //timer3_start_isr();
 }
+
+int lastx;
+int lasty;
 
 void loop() {
     if (j_x_pos > 180) {
@@ -171,3 +211,17 @@ void loop() {
 
     digitalWrite(27, led ? HIGH : LOW);
 }
+
+/*
+*  if (abs(j_x_pos - lastx) > 5) {
+servo1.write(j_x_pos);
+lastx = j_x_pos;
+} else {
+servo1.write(lastx);
+}
+if (abs(j_y_pos - lasty) > 5) {
+servo2.write(j_y_pos);
+lasty = j_y_pos;
+} else {
+servo2.write(lasty);
+}*/
