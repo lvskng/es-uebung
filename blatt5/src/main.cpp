@@ -43,7 +43,15 @@ double nextx;
 double nexty;
 const int replay_rate = 100;
 int counter = 0;
+bool initial_position_reached = false;
 void replay_timer_routine() {
+    if (!initial_position_reached) {
+        if (abs(servo1.read() - positions[0]) < 2 && abs(servo2.read() - positions[1]) < 2) {
+            initial_position_reached = true;
+        } else {
+            return;
+        }
+    }
     if (replay_timer_i >= positions_count) {
         Timer8.stop();
         live_mode = true;
@@ -76,6 +84,9 @@ void replay_timer_routine() {
 
 void button11_pressed() {
     Serial.println("Replay mode");
+    if (positions_count == 0) {
+        Serial.println("No positions recorded");
+    }
     for (int i = 0; i < positions_count; i++) {
         Serial.print("[");
         Serial.print(positions[i]);
@@ -83,18 +94,22 @@ void button11_pressed() {
         Serial.print(positions[++i]);
         Serial.print("], ");
     }
-    replay_timer_i = 0;
-    counter = 0;
-    live_mode = false;
-    target_pos_x = positions[replay_timer_i];
-    target_pos_y = positions[replay_timer_i + 1];
-    x_step = double(servo1.read() - target_pos_x) / replay_rate;
-    y_step = double(servo2.read() - target_pos_y) / replay_rate;
-    nextx = 0;
-    nexty = 0;
-    Timer8.start();
+    j_x_pos = positions[0];
+    j_y_pos = positions[1];
+    if (positions_count >= 2) {
+        initial_position_reached = false;
+        replay_timer_i = 2;
+        counter = 0;
+        live_mode = false;
+        target_pos_x = positions[replay_timer_i];
+        target_pos_y = positions[replay_timer_i + 1];
+        x_step = double(servo1.read() - target_pos_x) / replay_rate;
+        y_step = double(servo2.read() - target_pos_y) / replay_rate;
+        nextx = 0;
+        nexty = 0;
+        Timer8.start();
+    }
 }
-
 
 
 void timer_routine() {
