@@ -25,13 +25,17 @@ bool led = false;
 bool live_mode = true;
 
 void button12_pressed() {
-    Serial.println("Position recorded");
-    positions[positions_count++] = j_x_pos;
-    positions[positions_count++] = j_y_pos;
     if (positions_count == max_positions - 1) {
-        positions_count = 0;
         Serial.print("max positions recorded");
+    } else {
+        positions[positions_count++] = j_x_pos;
+        positions[positions_count++] = j_y_pos;
+        Serial.println("Position recorded");
     }
+}
+
+void clear_positions() {
+    positions_count = 0;
 }
 
 int replay_timer_i;
@@ -142,28 +146,94 @@ bool button11_low = false;
 uint button12 = 0;
 bool button12_low = false;
 uint sel = 0;
+bool sel_low = false;
+
+void check_button11() {
+    int button11_state = digitalRead(11);
+    if (button11_state == LOW) {
+        button11 += 10;
+        button11_low = true;
+    } else if (button11_state == HIGH && button11_low) {
+        button11_low = false;
+        button11 += 10;
+    }
+    else {
+        button11_low = false;
+        button11 = 0;
+    }
+
+}
+
+void check_button12() {
+    int button12_state = digitalRead(12);
+    if (button12_state == LOW ) {
+        button12 += 10;
+        button12_low = true;
+    } else if (button12_state == HIGH && button12_low) {
+        button12_low = false;
+        button12 += 10;
+    }
+    else {
+        button12_low = false;
+        button12 = 0;
+    }
+
+}
+
+void check_sel() {
+    int sel_state = digitalRead(18);
+    if (sel_state == LOW) {
+        sel_low = true;
+        sel += 10;
+    } else if (sel_state == HIGH && sel_low) {
+        sel_low = false;
+        sel += 10;
+    }
+    else {
+        sel_low = false;
+        sel = 0;
+    }
+}
 
 void button_timer_routine() {
-    int button11_state = digitalRead(11);
-    if (button11_state == LOW || button11_state == HIGH && button11_low) {
-        button11 += 10;
-    } else {
-        button11_low = false;
+    if (button11_low || button11 > 0) {
+        check_button11();
+
     }
-    if (button11 >= button_press_length) {
+    if (button12_low || button12 > 0) {
+        check_button12();
+    }
+    if (sel_low || sel > 0) {
+        check_sel();
+    }
+
+    if (sel >= button_press_length) {
+        Timer7.stop();
+
+        sel = 0;
+        sel_low = false;
+        button11 = 0;
+        button12 = 0;
+        button11_low = false;
+        button12_low = false;
+        led_toggle();
+        return;
+    }
+    if (button11 >= button_press_length && button12 >= button_press_length) {
+        Timer7.stop();
+
+        button11 = 0;
+        button11_low = false;
+        button12 = 0;
+        button12_low = false;
+        clear_positions();
+    } else if (button11 >= button_press_length) {
         Timer7.stop();
 
         button11 = 0;
         button11_low = false;
         button11_pressed();
-    }
-    int button12_state = digitalRead(12);
-    if (button12_state == LOW || button12_state == HIGH && button11_low) {
-        button12 += 10;
-    } else {
-        button12_low = false;
-    }
-    if (button12 >= button_press_length) {
+    } else if (button12 >= button_press_length) {
         Timer7.stop();
 
         button12 = 0;
@@ -173,6 +243,15 @@ void button_timer_routine() {
 }
 
 void button_isr() {
+    if (digitalRead(11) == LOW) {
+        button11_low = true;
+    }
+    if (digitalRead(12) == LOW) {
+        button12_low = true;
+    }
+    if (digitalRead(18) == LOW) {
+        sel_low = true;
+    }
     Timer7.start();
 }
 
