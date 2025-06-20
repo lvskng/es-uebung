@@ -1,0 +1,27 @@
+6.2
+-Konsequenzen
+    Weniger Speicherverbrauch
+    Geringere Farbtiefe
+-Umkodierung:
+    Blau / 255 * 31
+    Grün / 255 * 63
+    Rot / 255 * 31
+
+    Rot << 11
+    Grün << 5
+    Blau bleibt
+    Zusammen anden
+
+6.3.1
+    MEGA hat 8KB SRAM, 7KB avail
+    128*160 = 20480 px / 40960 byte p px
+    1 pixel = 16 bit = 2 byte
+    ca 3500 px großer FB
+
+6.3.2
+    Analog zu 565 wieder weniger Bits pro Farbe benutzen:
+    3 bits rot | 3 bits grün | 2 bits blau
+
+    Bei MEGA verdoppelt sich auf ca 7k pixel
+
+    Arduino Due kann komplette 40960 B im RAM haben
