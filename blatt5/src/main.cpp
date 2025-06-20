@@ -43,15 +43,7 @@ double nextx;
 double nexty;
 const int replay_rate = 100;
 int counter = 0;
-bool initial_position_reached = false;
 void replay_timer_routine() {
-    if (!initial_position_reached) {
-        if (abs(servo1.read() - positions[0]) < 2 && abs(servo2.read() - positions[1]) < 2) {
-            initial_position_reached = true;
-        } else {
-            return;
-        }
-    }
     if (replay_timer_i >= positions_count) {
         Timer8.stop();
         live_mode = true;
@@ -61,8 +53,8 @@ void replay_timer_routine() {
             replay_timer_i += 2;
             target_pos_x = positions[replay_timer_i];
             target_pos_y = positions[replay_timer_i + 1];
-            x_step = double(servo1.read() - target_pos_x) / replay_rate;
-            y_step = double(servo2.read() - target_pos_y) / replay_rate;
+            x_step = double(target_pos_x - positions[replay_timer_i - 2]) / replay_rate;
+            y_step = double(target_pos_y - positions[replay_timer_i - 1]) / replay_rate;
             Serial.print(x_step);
             Serial.print(" ");
             Serial.println(y_step);
@@ -71,11 +63,11 @@ void replay_timer_routine() {
         nextx += x_step;
         nexty += y_step;
         while (abs(nextx) >= 1) {
-            j_x_pos += 1;
+            j_x_pos += nextx > 0 ? 1 : -1;
             nextx -= nextx > 0 ? 1 : -1;
         }
         while (abs(nexty) >= 1) {
-            j_y_pos += 1;
+            j_y_pos += nexty > 0 ? 1 : -1;
             nexty -= nexty > 0 ? 1 : -1;
         }
         counter++;
@@ -97,14 +89,13 @@ void button11_pressed() {
     j_x_pos = positions[0];
     j_y_pos = positions[1];
     if (positions_count >= 2) {
-        initial_position_reached = false;
         replay_timer_i = 2;
         counter = 0;
         live_mode = false;
         target_pos_x = positions[replay_timer_i];
         target_pos_y = positions[replay_timer_i + 1];
-        x_step = double(servo1.read() - target_pos_x) / replay_rate;
-        y_step = double(servo2.read() - target_pos_y) / replay_rate;
+        x_step = double(target_pos_x - positions[replay_timer_i - 2]) / replay_rate;
+        y_step = double(target_pos_y - positions[replay_timer_i - 1]) / replay_rate;
         nextx = 0;
         nexty = 0;
         Timer8.start();
@@ -225,6 +216,7 @@ void loop() {
     servo2.write(j_y_pos);
 
     digitalWrite(27, led ? HIGH : LOW);
+    //delay(10);
 }
 
 /*
