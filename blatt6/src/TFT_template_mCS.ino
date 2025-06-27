@@ -4,8 +4,7 @@
 // configuration:  4-line serial interface, RGB-order: R-G-B,		     //
 
 #include <SPI.h>
-#include<DueTimer.h>
- 
+#include <string.h>
 //pin declarations
 #define TFT_CS     10   //display: CS-pin
 #define TFT_RST     9   //display: reset
@@ -292,47 +291,6 @@ void write_framebuffer(uint8_t xs, uint8_t xe, uint8_t ys, uint8_t ye) {
 const uint16_t bgColor = 0b11111111;
 const uint16_t fgColor = 0b11101000;
 
-DueTimer Timer6;
-
-uint8_t rotation_state = 0;
-
-void draw_slash(uint8_t x, uint8_t y, uint8_t diameter, uint8_t color, uint8_t rotation) {
-    if (diameter % 2 != 0) {
-        diameter += 1;
-    }
-    if (rotation == 0) {
-        // Draw a |
-        //start at x + (diameter / 2), y
-        //stop at x + (diameter / 2), y + diameter
-        for (int i = y; i <= (y+diameter); i++) {
-            setPixel(x + (diameter / 2), i, color);
-            //Serial.println(i);
-        }
-    } else if (rotation == 1) {
-        //Draw a /
-        for (int i = x; i <= (x+diameter); i++) {
-            setPixel(i, y + (diameter - (i - x)), color);
-        }
-    } else if (rotation == 2) {
-        //Draw a -
-        for (int i = x; i <= (x+diameter); i++) {
-            setPixel(i, y + (diameter / 2), color);
-        }
-    } else {
-        //Draw a '\'
-        for (int i = x; i <= (x+diameter); i++) {
-            setPixel(i, y + (i - x), color);
-        }
-    }
-}
-
-void timer_isr() {
-    draw_slash(55, 39, 50, bgColor, rotation_state);
-    draw_slash(55, 39, 50, fgColor, (rotation_state+1) % 4);
-    write_framebuffer(FIRST_COL, LAST_COL, FIRST_ROW, LAST_ROW);
-    rotation_state = (rotation_state + 1) % 4;
-}
-
 void setup() {
   // set pin-modes
   pinMode(TFT_RST, OUTPUT);
@@ -433,17 +391,35 @@ void setup() {
         setPixel(i / 128,  i % 128, bgColor);
     }
     write_framebuffer(FIRST_COL, LAST_COL, FIRST_ROW, LAST_ROW);
+}
 
-    if (!Timer6.configure(10, timer_isr)) {
-        Serial.println("Timer6 configure failed");
+int print_char(uint8_t x, uint8_t y, char value, uint8_t fgColor, uint8_t bgColor) {
+    if ((x+6) > 128 || (y+8) > 160) {
+        return -1;
     }
-    Timer6.start();
+    for (uint8_t i=0; i<6; i++) {
+        for (uint8_t j=0; j<8; j++) {
+            uint8_t pixel = font[value - 32][i] & (0b00000001 << (7 - j));
+            setPixel(x + i, y + j, pixel ? fgColor : bgColor);
+        }
+    }
+    return 0;
+}
+
+int print_string(uint8_t x, uint8_t y, char *c_str, uint8_t fgColor, uint8_t bgColor) {
+    if (x + (strlen(c_str) * 6) > 128 || y + 8 > 160) return -1;
+    for (uint8_t i=0; i<strlen(c_str); i++) {
+        print_char(x + (i * 6), y, c_str[i], fgColor, bgColor);
+    }
+    return 0;
 }
 
 
 
-
 void loop() {
+    //print_char(80, 60, '%', fgColor, bgColor);
+    print_string(40,60,"Hello world", fgColor, bgColor);
+    write_framebuffer(FIRST_COL, LAST_COL, FIRST_ROW, LAST_ROW);
     /*
     for (uint16_t i = 0; i < 160 * 128; i++) {
         setPixel(i / 160,  i % 160, fgColor);
