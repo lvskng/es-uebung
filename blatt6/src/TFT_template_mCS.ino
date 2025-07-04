@@ -261,7 +261,36 @@ void write_framebuffer(uint8_t xs, uint8_t xe, uint8_t ys, uint8_t ye) {
     TFT_CS_LOW();
     TFTwriteWindow(xs, xe, ys, ye);
     TFTwriteCommand(RAMWR);
-    for (uint16_t i=0; i<(xe+1-xs)*(ye+1-ys); i++) {
+    /*
+    for (uint8_t i = xs - FIRST_COL; i < xe; i++) {
+        for (uint8_t j = ys - FIRST_ROW; j < ye; j++) {
+            uint8_t value = framebuffer[i * 128 + j];
+            uint8_t blue = value & 0b00000011;
+            uint8_t b_shifted = (blue << 3) & 0b00010000;
+            uint8_t b_lower = (blue & 0b00000001) << 2;
+            uint8_t blue_v = b_shifted | b_lower; //00000|000000|10100
+
+            uint8_t green = value & 0b00011100;
+            uint16_t g_upper = (green  & 0b00010000) << 6;
+            uint16_t g_middle = (green & 0b00001000) << 5;
+            uint16_t g_lower = (green & 0b00000100) << 4;
+            uint16_t green_v = g_upper | g_middle | g_lower; //00000|101010|00000
+
+
+            uint8_t red = value & 0b11100000;
+            uint16_t red_upper = (red & 0b10000000) << 8;
+            uint16_t red_middle = (red & 0b01000000) << 7;
+            uint16_t red_lower = (red & 0b00100000) << 6;
+            uint16_t red_v = red_upper | red_middle | red_lower; //10101|000000|00000
+
+            uint16_t rgb565_c = red_v | green_v | blue_v;
+
+            SPI.transfer(rgb565_c >> 8);
+            SPI.transfer(rgb565_c);
+        }
+    }*/
+
+    for (uint16_t i=((xs - FIRST_COL) * 128 + (ys - FIRST_ROW)); i<((xe+1-xs)*(ye+1-ys)) + ((xs - FIRST_COL) * 128 + (ys - FIRST_ROW)); i++) {
         uint8_t value = framebuffer[i];
         uint8_t blue = value & 0b00000011;
         uint8_t b_shifted = (blue << 3) & 0b00010000;
@@ -314,6 +343,7 @@ const uint16_t bgColor = 0b11111111;
 const uint16_t fgColor = 0b11101000;
 
 DueTimer Timer4;
+DueTimer Timer5;
 
 char * names[][2] {
   {"Philip Hedram", "7503095"},
@@ -324,12 +354,55 @@ uint8_t names_ptr = 0;
 
 uint8_t timer_counter = 4;
 
-void timer_routine() {
-    if (timer_counter == 4) {
-        for (uint16_t i = 0; i < (160 * 128); i++) {
-            setPixel(i / 128, i % 128, bgColor);
+void clear_display() {
+    for (uint16_t i = 0; i < (160 * 128); i++) {
+        setPixel(i / 128, i % 128, bgColor);
+    }
+    write_framebuffer(FIRST_COL, LAST_COL, FIRST_ROW, LAST_ROW);
+}
+
+uint8_t rotation_state = 0;
+
+void draw_slash(uint8_t x, uint8_t y, uint8_t diameter, uint8_t color, uint8_t rotation) {
+    if (diameter % 2 != 0) {
+        diameter += 1;
+    }
+    if (rotation == 0) {
+        // Draw a |
+        //start at x + (diameter / 2), y
+        //stop at x + (diameter / 2), y + diameter
+        for (int i = y; i <= (y+diameter); i++) {
+            setPixel(x + (diameter / 2), i, color);
+            //Serial.println(i);
         }
-        write_framebuffer(FIRST_COL, LAST_COL, FIRST_ROW, LAST_ROW);
+    } else if (rotation == 1) {
+        //Draw a /
+        for (int i = x; i <= (x+diameter); i++) {
+            setPixel(i, y + (diameter - (i - x)), color);
+        }
+    } else if (rotation == 2) {
+        //Draw a -
+        for (int i = x; i <= (x+diameter); i++) {
+            setPixel(i, y + (diameter / 2), color);
+        }
+    } else {
+        //Draw a '\'
+        for (int i = x; i <= (x+diameter); i++) {
+            setPixel(i, y + (i - x), color);
+        }
+    }
+}
+
+void rotbar_timer_routine() {
+    draw_slash(55, 39, 50, bgColor, rotation_state);
+    draw_slash(55, 39, 50, fgColor, (rotation_state+1) % 4);
+    write_framebuffer(FIRST_COL, LAST_COL, FIRST_ROW, LAST_ROW);
+    rotation_state = (rotation_state + 1) % 4;
+}
+
+void studid_timer_routine() {
+    if (timer_counter == 4) {
+        clear_display();
 
         char **name = names[names_ptr];
 
@@ -446,38 +519,83 @@ void setup() {
     SPI.endTransaction();
   Serial.println("\nSetup finished\n");
 
-    for (uint16_t i = 0; i < (160*128); i++) {
-        setPixel(i / 128,  i % 128, bgColor);
-    }
-    write_framebuffer(FIRST_COL, LAST_COL, FIRST_ROW, LAST_ROW);
+    clear_display();
 
-    if (!Timer4.configure(1, timer_routine)) {
-        Serial.println("ERROR: Timer4 configure failed");
+    if (!Timer4.configure(1, studid_timer_routine) || !Timer5.configure(10, rotbar_timer_routine)) {
+        Serial.println("ERROR: Timer configure failed");
     }
+    Serial.begin(9600);
+}
 
+void start_student_id_demo() {
+    timer_counter = 4;
     Timer4.start();
 }
 
+void stop_student_id_demo() {
+    Timer4.stop();
+}
+
+void start_rotbar_demo() {
+    Timer5.start();
+}
+
+void stop_rotbar_demo() {
+    Timer5.stop();
+}
+
+void print_help() {
+    Serial.println("Available commands:");
+    Serial.println("  clear | clears display");
+    Serial.println("  runRBD | runs rotating bar demo");
+    Serial.println("  runID | runs student id demo");
+    Serial.println("  stop | stops all running demos");
+}
+
+char input[64] = "";
+int next = 0;
+
+void parse_string() {
+    char *ptr = strtok(input, " ");
+
+    String command = String(ptr);
 
 
+    if (strcmp(ptr, "help") == 0) {
+        print_help();
+    } else if (strcmp(ptr, "clear") == 0) {
+        clear_display();
+    } else if (strcmp(ptr, "runRBD") == 0) {
+        start_rotbar_demo();
+    } else if (strcmp(ptr, "runID") == 0) {
+        start_student_id_demo();
+    } else if (strcmp(ptr, "stop") == 0) {
+        stop_student_id_demo();
+        stop_rotbar_demo();
+    } else {
+        Serial.println("Invalid command " + command);
+        print_help();
+    }
 
+    memset(&input[0], 0, sizeof(input));
+}
 
 void loop() {
-    //print_char(80, 60, '%', fgColor, bgColor);
-    /*
-    for (uint16_t i = 0; i < 160 * 128; i++) {
-        setPixel(i / 160,  i % 160, fgColor);
-        if (i % 128 == 0) {
-            write_framebuffer(FIRST_COL, LAST_COL, i / 128, (i / 128) + 1);
-            delay(20);
+    if (Serial.available() > 0 && next < 63) {
+        char c = Serial.read();
+        if (c == '\r') {
+            input[next] = '\0';
+            Serial.print("\n");
+            parse_string();
+            next = 0;
+        } else if (c != '\n') {
+            input[next++] = c;
+            Serial.print(c);
         }
+    } else if (next == 63) {
+        input[next] = '\0';
+        Serial.print("\n");
+        parse_string();
+        next = 0;
     }
-    for (uint16_t i = 0; i < 160 * 128; i++) {
-        setPixel(i / 160,  i % 160, bgColor);
-        if (i % 128 == 0) {
-            write_framebuffer(FIRST_COL, LAST_COL, i / 128, (i / 128) + 1);
-            delay(20);
-        }
-    }
-    */
 }   
