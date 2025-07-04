@@ -5,17 +5,24 @@
 
 #include <SPI.h>
 #include <string.h>
-#include <DueTimer.h>
+#define __AVR_ATmega2560__ 1
+#if defined(__AVR_ATmega2560__)
+  #include <SimpleTimer.h>
+  #warning "__AVR_ATmega2560__ is defined"
+#else
+  #warning "__AVR_ATmega2560__ is NOT defined"
+  #include <DueTimer.h>
+#endif
 //pin declarations
 #define TFT_CS     10   //display: CS-pin
 #define TFT_RST     9   //display: reset
 #define TFT_DC      8   //display: Data/Command (D/C)
 
 #if defined(__AVR_ATmega2560__)
- #define SS_SLAVE 	53	
- //must be put into output mode; otherwise ATmega could assume 
+ #define SS_SLAVE 	53
+ //must be put into output mode; otherwise ATmega could assume
  //to be set into slave mode but SPI-lib doesn't support this
- //mode. So it breaks SPI-lib. Configured as output, the pin 
+ //mode. So it breaks SPI-lib. Configured as output, the pin
  //can be used as normal output.
 #endif
 
@@ -31,37 +38,41 @@
 #define SPI_DEFAULT_FREQ   1e6      ///< Default SPI data clock frequency
 SPISettings settingsTFT(SPI_DEFAULT_FREQ, MSBFIRST, SPI_MODE0);
 
+const int FB_X = 96;
+const int FB_Y = 64;           //VCOM Voltage setting
+
+uint8_t framebuffer[FB_X * FB_Y];
 
 //TFT-area of 128 x 160 (1.8") TFT
 const uint8_t FIRST_COL = 2;
 const uint8_t FIRST_ROW = 1;
-const uint8_t LAST_COL = 129;
-const uint8_t LAST_ROW = 160;
+const uint8_t LAST_COL = FB_Y + 1;
+const uint8_t LAST_ROW = FB_X;
 
 //TFT's commands
-const uint8_t NOP = 0x00;               // no Operation 
-const uint8_t SWRESET = 0x01;           // Software reset                                                                                                                  
-const uint8_t SLPOUT = 0x11;            //Sleep out & booster on                                                                                                           
-const uint8_t DISPOFF = 0x28;           //Display off                                                                                                                          
-const uint8_t DISPON = 0x29;            //Display on                                                                                                                       
-const uint8_t CASET = 0x2A;             //Column adress set                                                                                                        
-const uint8_t RASET = 0x2B;             //Row adress set                                                                                                           
-const uint8_t RAMWR = 0x2C;             //Memory write                                                                                                             
-const uint8_t MADCTL = 0x36;            //Memory Data Access Control                                                                                                       
-const uint8_t COLMOD = 0x3A;            //RGB-format, 12/16/18bit                                                                                                          
-const uint8_t INVOFF = 0x20;            // Display inversion off                                                                                                           
-const uint8_t INVON = 0x21;             // Display inversion on                                                                                                    
-const uint8_t INVCTR = 0xB4;            //Display Inversion mode control                                                                                                   
-const uint8_t NORON = 0x13;             //Partial off (Normal)                                                                                                     
-                                                                                                                                                                           
-const uint8_t PWCTR1 = 0xC0;            //Power Control 1                                                                                                                  
-const uint8_t PWCTR2 = 0xC1;            //Power Control 2                                                                                                                  
-const uint8_t PWCTR3 = 0xC2;            //Power Control 3                                                                                                                  
-const uint8_t PWCTR4 = 0xC3;            //Power Control 4                                                                                                                  
-const uint8_t PWCTR5 = 0xC4;            //Power Control 5
-const uint8_t VMCTR1 = 0xC5;            //VCOM Voltage setting
+const uint8_t NOP = 0x00;               // no Operation
+const uint8_t SWRESET = 0x01;           // Software reset
+const uint8_t SLPOUT = 0x11;            //Sleep out & booster on
+const uint8_t DISPOFF = 0x28;           //Display off
+const uint8_t DISPON = 0x29;            //Display on
+const uint8_t CASET = 0x2A;             //Column adress set
+const uint8_t RASET = 0x2B;             //Row adress set
+const uint8_t RAMWR = 0x2C;             //Memory write
+const uint8_t MADCTL = 0x36;            //Memory Data Access Control
+const uint8_t COLMOD = 0x3A;            //RGB-format, 12/16/18bit
+const uint8_t INVOFF = 0x20;            // Display inversion off
+const uint8_t INVON = 0x21;             // Display inversion on
+const uint8_t INVCTR = 0xB4;            //Display Inversion mode control
+const uint8_t NORON = 0x13;             //Partial off (Normal)
 
-uint8_t framebuffer[128*160];
+const uint8_t PWCTR1 = 0xC0;            //Power Control 1
+const uint8_t PWCTR2 = 0xC1;            //Power Control 2
+const uint8_t PWCTR3 = 0xC2;            //Power Control 3
+const uint8_t PWCTR4 = 0xC3;            //Power Control 4
+const uint8_t PWCTR5 = 0xC4;            //Power Control 5
+const uint8_t VMCTR1 = 0xC5;
+
+
 
 unsigned char font[95][6] =
 {
@@ -250,9 +261,9 @@ void TFTinit(void) {
 void  setPixel(uint8_t x, uint8_t y, uint8_t value) {
     // get blue
     // get msb
-    if (x > 160) x = 160;
-    if (y > 128) y = 128;
-    framebuffer[(x*128) + y] = value;
+    if (x > FB_X) x = FB_X;
+    if (y > FB_Y) y = FB_Y;
+    framebuffer[(x*FB_Y) + y] = value;
     //Serial.println(value);
 }
 
@@ -290,7 +301,7 @@ void write_framebuffer(uint8_t xs, uint8_t xe, uint8_t ys, uint8_t ye) {
         }
     }*/
 
-    for (uint16_t i=((xs - FIRST_COL) * 128 + (ys - FIRST_ROW)); i<((xe+1-xs)*(ye+1-ys)) + ((xs - FIRST_COL) * 128 + (ys - FIRST_ROW)); i++) {
+    for (uint16_t i=((xs - FIRST_COL) * FB_Y + (ys - FIRST_ROW)); i<((xe+1-xs)*(ye+1-ys)) + ((xs - FIRST_COL) * FB_Y + (ys - FIRST_ROW)); i++) {
         uint8_t value = framebuffer[i];
         uint8_t blue = value & 0b00000011;
         uint8_t b_shifted = (blue << 3) & 0b00010000;
@@ -319,7 +330,8 @@ void write_framebuffer(uint8_t xs, uint8_t xe, uint8_t ys, uint8_t ye) {
 }
 
 int print_char(uint8_t x, uint8_t y, char value, uint8_t fgColor, uint8_t bgColor) {
-    if ((x+6) > 128 || (y+8) > 160) {
+    //TODO manipulated for simulator
+    if (false && ((x+6) > FB_Y || (y+8) > FB_X)) {
         return -1;
     }
     for (uint8_t i=0; i<6; i++) {
@@ -332,7 +344,7 @@ int print_char(uint8_t x, uint8_t y, char value, uint8_t fgColor, uint8_t bgColo
 }
 
 int print_string(uint8_t x, uint8_t y, char *c_str, uint8_t fgColor, uint8_t bgColor) {
-    if (x + (strlen(c_str) * 6) > 128 || y + 8 > 160) return -1;
+    if (false && (x + (strlen(c_str) * 6) > FB_Y || y + 8 > FB_X)) return -1;
     for (uint8_t i=0; i<strlen(c_str); i++) {
         print_char(x + (i * 6), y, c_str[i], fgColor, bgColor);
     }
@@ -342,12 +354,22 @@ int print_string(uint8_t x, uint8_t y, char *c_str, uint8_t fgColor, uint8_t bgC
 const uint16_t bgColor = 0b11111111;
 const uint16_t fgColor = 0b11101000;
 
+#if defined(__AVR_ATmega2560__)
+SimpleTimer simple_timer;
+int timer4;
+int timer5;
+#define USE_ST 1
+#else
 DueTimer Timer4;
 DueTimer Timer5;
+#define USE_ST 0
+#endif
+
+
 
 char * names[][2] {
-  {"Philip Hedram", "7503095"},
-    {"Lovis Koenig", "7056609"}
+  {"PH", "123"},
+    {"LK", "456"}
 };
 
 uint8_t names_ptr = 0;
@@ -355,8 +377,8 @@ uint8_t names_ptr = 0;
 uint8_t timer_counter = 4;
 
 void clear_display() {
-    for (uint16_t i = 0; i < (160 * 128); i++) {
-        setPixel(i / 128, i % 128, bgColor);
+    for (uint16_t i = 0; i < (FB_X * FB_Y); i++) {
+        setPixel(i / FB_Y, i % FB_Y, bgColor);
     }
     write_framebuffer(FIRST_COL, LAST_COL, FIRST_ROW, LAST_ROW);
 }
@@ -394,26 +416,32 @@ void draw_slash(uint8_t x, uint8_t y, uint8_t diameter, uint8_t color, uint8_t r
 }
 
 void rotbar_timer_routine() {
-    draw_slash(55, 39, 50, bgColor, rotation_state);
-    draw_slash(55, 39, 50, fgColor, (rotation_state+1) % 4);
-    write_framebuffer(FIRST_COL, LAST_COL, FIRST_ROW, LAST_ROW);
+    draw_slash(0, 0, 10, bgColor, rotation_state);
+    draw_slash(0, 0, 10, fgColor, (rotation_state+1) % 4);
+    write_framebuffer(FIRST_COL, FIRST_COL + 10, FIRST_ROW, LAST_ROW + 10);
     rotation_state = (rotation_state + 1) % 4;
 }
 
+const int x_pos_offset = 20;
+const int y_pos = 20;
+
 void studid_timer_routine() {
-    if (timer_counter == 4) {
+    if (timer_counter == 4 || USE_ST) {
         clear_display();
 
         char **name = names[names_ptr];
 
         uint8_t name_length = strlen(name[0]) * 6;
-        uint8_t name_x_pos = 80 - (name_length / 2);
+        uint8_t name_x_pos = x_pos_offset - (name_length / 2);
 
         uint8_t matnr_length = strlen(name[1]) * 6;
-        uint8_t matnr_x_pos = 80 - (matnr_length / 2);
+        uint8_t matnr_x_pos = x_pos_offset - (matnr_length / 2);
 
-        print_string(name_x_pos, 60, name[0], fgColor, bgColor);
-        print_string(matnr_x_pos, 50, name[1], fgColor, bgColor);
+        int i;
+
+        i |= print_string(name_x_pos, y_pos + 10, name[0], fgColor, bgColor);
+        i |= print_string(matnr_x_pos, y_pos, name[1], fgColor, bgColor);
+        if (i != 0) Serial.println("Display too small");
         write_framebuffer(FIRST_COL, LAST_COL, FIRST_ROW, LAST_ROW);
 
         names_ptr = (names_ptr + 1) % 2;
@@ -428,8 +456,8 @@ void setup() {
   pinMode(TFT_RST, OUTPUT);
   pinMode(TFT_DC, OUTPUT);
   pinMode(TFT_CS, OUTPUT);
-  #if defined(__AVR_ATmega2560__)  
-     pinMode(SS_SLAVE, OUTPUT); 
+  #if defined(__AVR_ATmega2560__)
+     pinMode(SS_SLAVE, OUTPUT);
   #endif
 
   // set inactive levels
@@ -517,31 +545,55 @@ void setup() {
             SPI.transfer((uint8_t)0xF800); }
     TFT_CS_HIGH();
     SPI.endTransaction();
-  Serial.println("\nSetup finished\n");
 
     clear_display();
-
-    if (!Timer4.configure(1, studid_timer_routine) || !Timer5.configure(10, rotbar_timer_routine)) {
+    #if !defined(__AVR_ATmega2560__)
+     if (!Timer4.configure(1, studid_timer_routine) || !Timer5.configure(10, rotbar_timer_routine)) {
         Serial.println("ERROR: Timer configure failed");
     }
-    Serial.begin(9600);
+    #else
+    timer4 = simple_timer.setInterval(5000, studid_timer_routine);
+    simple_timer.disable(timer4);
+    timer5 = simple_timer.setInterval(100, rotbar_timer_routine);
+    simple_timer.disable(timer5);
+  #endif
+
+  Serial.println("\nSetup finished\n");
 }
 
 void start_student_id_demo() {
-    timer_counter = 4;
+  #if !defined(__AVR_ATmega2560__)
+     timer_counter = 4;
     Timer4.start();
+  #else
+    simple_timer.enable(timer4);
+  #endif
 }
 
 void stop_student_id_demo() {
+    #if !defined(__AVR_ATmega2560__)
+
     Timer4.stop();
+  #else
+  simple_timer.disable(timer4);
+  #endif
 }
 
 void start_rotbar_demo() {
+    #if !defined(__AVR_ATmega2560__)
     Timer5.start();
+  #else
+  simple_timer.enable(timer5);
+  #endif
 }
 
 void stop_rotbar_demo() {
+     #if !defined(__AVR_ATmega2560__)
+
     Timer5.stop();
+  #else
+  simple_timer.disable(timer5);
+  #endif
 }
 
 void print_help() {
@@ -581,6 +633,10 @@ void parse_string() {
 }
 
 void loop() {
+    #if defined(__AVR_ATmega2560__)
+
+    simple_timer.run();
+  #endif
     if (Serial.available() > 0 && next < 63) {
         char c = Serial.read();
         if (c == '\r') {
