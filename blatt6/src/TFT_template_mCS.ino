@@ -38,16 +38,16 @@
 #define SPI_DEFAULT_FREQ   1e6      ///< Default SPI data clock frequency
 SPISettings settingsTFT(SPI_DEFAULT_FREQ, MSBFIRST, SPI_MODE0);
 
-const int FB_X = 96;
+const int FB_X = 92;
 const int FB_Y = 64;           //VCOM Voltage setting
 
-uint8_t framebuffer[FB_X * FB_Y];
+uint8_t framebuffer[FB_X][FB_Y];
 
 //TFT-area of 128 x 160 (1.8") TFT
-const uint8_t FIRST_COL = 2;
-const uint8_t FIRST_ROW = 1;
-const uint8_t LAST_COL = FB_Y + 1;
-const uint8_t LAST_ROW = FB_X;
+const uint8_t FIRST_COL = 1;
+const uint8_t FIRST_ROW = 2;
+const uint8_t LAST_COL = FB_X;
+const uint8_t LAST_ROW = FB_Y;
 
 //TFT's commands
 const uint8_t NOP = 0x00;               // no Operation
@@ -256,15 +256,28 @@ void TFTinit(void) {
       SPI.endTransaction();
 }
 
+const uint16_t bgColor = 0b11111111;
+const uint16_t fgColor = 0b11101000;
+const uint16_t err1Color = 0b11100011;
+const uint16_t err2Color = 0b00011110;
+
+bool write_flag = false;
+
 //  R   G   B
 // 111|111|11
 void  setPixel(uint8_t x, uint8_t y, uint8_t value) {
     // get blue
     // get msb
-    if (x > FB_X) x = FB_X;
-    if (y > FB_Y) y = FB_Y;
-    framebuffer[(x*FB_Y) + y] = value;
+    //if (x > FB_X) x = FB_X;
+    //if (y > FB_Y) y = FB_Y;
+    framebuffer[x % FB_X][y % FB_Y] = value;
     //Serial.println(value);
+}
+
+uint8_t getPixel(uint8_t x, uint8_t y) {
+  if (x >= FB_X) return err1Color;
+  if (y >= FB_Y) return err2Color;
+  return framebuffer[x % FB_X][y % FB_Y];
 }
 
 void write_framebuffer(uint8_t xs, uint8_t xe, uint8_t ys, uint8_t ye) {
@@ -272,10 +285,10 @@ void write_framebuffer(uint8_t xs, uint8_t xe, uint8_t ys, uint8_t ye) {
     TFT_CS_LOW();
     TFTwriteWindow(xs, xe, ys, ye);
     TFTwriteCommand(RAMWR);
-    /*
-    for (uint8_t i = xs - FIRST_COL; i < xe; i++) {
-        for (uint8_t j = ys - FIRST_ROW; j < ye; j++) {
-            uint8_t value = framebuffer[i * 128 + j];
+
+    for (uint8_t j = ys - FIRST_ROW; j < ye; j++) {
+      for (uint8_t i = xs - FIRST_COL; i < xe; i++) {
+            uint8_t value = getPixel(i,j);
             uint8_t blue = value & 0b00000011;
             uint8_t b_shifted = (blue << 3) & 0b00010000;
             uint8_t b_lower = (blue & 0b00000001) << 2;
@@ -298,10 +311,13 @@ void write_framebuffer(uint8_t xs, uint8_t xe, uint8_t ys, uint8_t ye) {
 
             SPI.transfer(rgb565_c >> 8);
             SPI.transfer(rgb565_c);
-        }
-    }*/
 
-    for (uint16_t i=((xs - FIRST_COL) * FB_Y + (ys - FIRST_ROW)); i<((xe+1-xs)*(ye+1-ys)) + ((xs - FIRST_COL) * FB_Y + (ys - FIRST_ROW)); i++) {
+
+        }
+    }
+
+
+    /*for (uint16_t i=((xs - FIRST_COL) * FB_Y + (ys - FIRST_ROW)); i<((xe+1-xs)*(ye+1-ys)) + ((xs - FIRST_COL) * FB_Y + (ys - FIRST_ROW)); i++) {
         uint8_t value = framebuffer[i];
         uint8_t blue = value & 0b00000011;
         uint8_t b_shifted = (blue << 3) & 0b00010000;
@@ -324,14 +340,14 @@ void write_framebuffer(uint8_t xs, uint8_t xe, uint8_t ys, uint8_t ye) {
         uint16_t rgb565_c = red_v | green_v | blue_v;
 
         SPI.transfer(rgb565_c >> 8);
-        SPI.transfer(rgb565_c);}
+        SPI.transfer(rgb565_c);}*/
     TFT_CS_HIGH();
     SPI.endTransaction();
 }
 
 int print_char(uint8_t x, uint8_t y, char value, uint8_t fgColor, uint8_t bgColor) {
     //TODO manipulated for simulator
-    if (false && ((x+6) > FB_Y || (y+8) > FB_X)) {
+    if ((x+6) > FB_Y || (y+8) > FB_X) {
         return -1;
     }
     for (uint8_t i=0; i<6; i++) {
@@ -344,15 +360,12 @@ int print_char(uint8_t x, uint8_t y, char value, uint8_t fgColor, uint8_t bgColo
 }
 
 int print_string(uint8_t x, uint8_t y, char *c_str, uint8_t fgColor, uint8_t bgColor) {
-    if (false && (x + (strlen(c_str) * 6) > FB_Y || y + 8 > FB_X)) return -1;
+    if (x + (strlen(c_str) * 6) > FB_Y || y + 8 > FB_X) return -1;
     for (uint8_t i=0; i<strlen(c_str); i++) {
         print_char(x + (i * 6), y, c_str[i], fgColor, bgColor);
     }
     return 0;
 }
-
-const uint16_t bgColor = 0b11111111;
-const uint16_t fgColor = 0b11101000;
 
 #if defined(__AVR_ATmega2560__)
 SimpleTimer simple_timer;
@@ -368,8 +381,10 @@ DueTimer Timer5;
 
 
 char * names[][2] {
-  {"PH", "123"},
-    {"LK", "456"}
+  //{"Philip Hedram", "7503095"},
+  //{"Lovis Koenig", "7056609"}
+  {"PH", "01"},
+  {"LK", "02"}
 };
 
 uint8_t names_ptr = 0;
@@ -377,8 +392,10 @@ uint8_t names_ptr = 0;
 uint8_t timer_counter = 4;
 
 void clear_display() {
-    for (uint16_t i = 0; i < (FB_X * FB_Y); i++) {
-        setPixel(i / FB_Y, i % FB_Y, bgColor);
+    for (uint8_t i = 0; i < FB_X; i++) {
+        for (uint8_t j = 0; j < FB_Y; j++) {
+            setPixel(i, j, bgColor);
+        }
     }
     write_framebuffer(FIRST_COL, LAST_COL, FIRST_ROW, LAST_ROW);
 }
@@ -416,14 +433,14 @@ void draw_slash(uint8_t x, uint8_t y, uint8_t diameter, uint8_t color, uint8_t r
 }
 
 void rotbar_timer_routine() {
-    draw_slash(0, 0, 10, bgColor, rotation_state);
-    draw_slash(0, 0, 10, fgColor, (rotation_state+1) % 4);
-    write_framebuffer(FIRST_COL, FIRST_COL + 10, FIRST_ROW, LAST_ROW + 10);
+    draw_slash(50, 10, 10, bgColor, rotation_state);
+    draw_slash(50, 10, 10, fgColor, (rotation_state+1) % 4);
+    write_framebuffer(50 + FIRST_COL, FIRST_COL + 60, 10 + FIRST_ROW, FIRST_ROW + 20);
     rotation_state = (rotation_state + 1) % 4;
 }
 
 const int x_pos_offset = 20;
-const int y_pos = 20;
+const int y_pos = 1;
 
 void studid_timer_routine() {
     if (timer_counter == 4 || USE_ST) {
