@@ -323,8 +323,12 @@ void write_framebuffer(uint8_t xs, uint8_t xe, uint8_t ys, uint8_t ye) {
 }
 
 int print_char(uint8_t x, uint8_t y, char value, uint8_t fgColor, uint8_t bgColor) {
-    if (false && (x+6) > FB_Y || (y+8) > FB_X) {
-        return -1;
+    if ((x+8) > FB_Y || (y+6) > FB_X) {
+        if ((x + 8) > FB_Y) {
+            return -1;
+        }
+        return -2;
+        //return -1;
     }
     for (uint8_t i=0; i<6; i++) {
         for (uint8_t j=0; j<8; j++) {
@@ -336,7 +340,7 @@ int print_char(uint8_t x, uint8_t y, char value, uint8_t fgColor, uint8_t bgColo
 }
 
 int print_string(uint8_t x, uint8_t y, char *c_str, uint8_t fgColor, uint8_t bgColor) {
-    if (false && x + (strlen(c_str) * 6) > FB_Y || y + 8 > FB_X) return -1;
+    if (x + (strlen(c_str) * 6) > FB_Y || y + 8 > FB_X) return -1;
     for (uint8_t i=0; i<strlen(c_str); i++) {
         print_char(x + (i * 6), y, c_str[i], fgColor, bgColor);
     }
@@ -482,7 +486,93 @@ void output_file(char *filename) {
 }
 
 void display_file(char *filename) {
-    Serial.println("NOT IMPLEMENTED");
+    char full_fname[strlen(filename)];
+    strcpy(full_fname, filename);
+    char *fsplit = strtok(filename, ".");
+    fsplit = strtok(NULL, ".");
+    char *ftype = fsplit;
+
+    Serial.println(full_fname);
+
+    if (!SD.exists(full_fname)) {
+        Serial.println("File does not exist");
+        return;
+    }
+
+    File f = SD.open(full_fname, FILE_READ);
+
+    if (strcmp(ftype, "TXT") == 0) {
+        uint8_t x = FIRST_ROW + 2;
+        uint8_t y = LAST_COL - 12;
+
+        while (f.available()) {
+            char c = f.read();
+            if (c == '\n') {
+                break;
+            }
+            Serial.print(c);
+            int res = print_char(x, y, c, fgColor, bgColor);
+            if (res != 0) {
+                if (y < 8) {
+                    print_string(0, 0, "Display too small for file", fgColor, bgColor);
+                    break;
+                }
+                y -= 8;
+                x = FIRST_ROW + 2;
+                print_char(x, y, c, fgColor, bgColor);
+            }
+            x += 6;
+        }
+    } else {
+        //FILE IS IMAGE
+        bool dimensions_found = false;
+        uint8_t dim_x = 0, dim_y = 0;
+        char buf[8];
+        int buf_pos = 0;
+
+        uint8_t xs, ys;
+
+        uint8_t x, y;
+
+        while (f.available()) {
+            char c = f.read();
+            if (!dimensions_found) {
+                if (c == ',' || c == '\n') {
+                    buf[++buf_pos] == '\0';
+                    if (dim_x == 0) {
+                        dim_x = atoi(buf);
+                        memset(&buf[0], 0, 8);
+                        buf_pos = 0;
+                        Serial.println(dim_x);
+                    } else {
+                        dim_y = atoi(buf);
+                        dimensions_found = true;
+                        Serial.println(dim_y);
+                        xs = (LAST_COL / 2) - (dim_x / 2);
+                        ys = (LAST_ROW / 2) - (dim_y / 2);
+                        x = xs;
+                        y = ys;
+                        Serial.println(xs);
+                        Serial.println(ys);
+                        Serial.println(x);
+                        Serial.println(y);
+                    }
+                } else {
+                    buf[buf_pos++] = c;
+                }
+            } else {
+                if (c != '\n' && c != ',') {
+                    setPixel(x++, y, c == '1' ? fgColor : bgColor);
+                    if (x >= (xs + dim_x)) {
+                        y++;
+                        x = xs;
+                    }
+                }
+            }
+
+        }
+    }
+    write_framebuffer(FIRST_COL, LAST_COL, FIRST_ROW, LAST_ROW);
 }
 
 void setup() {
