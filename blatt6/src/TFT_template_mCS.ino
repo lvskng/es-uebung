@@ -5,6 +5,7 @@
 
 #include <SPI.h>
 #include <string.h>
+#include <SD.h>
 //#define __AVR_ATmega2560__ 1
 #if defined(__AVR_ATmega2560__)
   #include <SimpleTimer.h>
@@ -17,6 +18,7 @@
 #define TFT_CS     10   //display: CS-pin
 #define TFT_RST     9   //display: reset
 #define TFT_DC      8   //display: Data/Command (D/C)
+#define SD_CS      4 //SD: CS
 
 #if defined(__AVR_ATmega2560__)
  #define SS_SLAVE 	53
@@ -442,11 +444,53 @@ void studid_timer_routine() {
     }
 }
 
+void list_directory(char *dirname) {
+    File dir = SD.open(dirname, FILE_READ);
+    if (dir.isDirectory()) {
+        while (true) {
+            File f = dir.openNextFile();
+            if (!f) {
+                break;
+            }
+            if (f.isDirectory()) {
+                Serial.print("/");
+            }
+            Serial.println(f.name());
+        }
+    } else {
+        Serial.print(dirname);
+        Serial.println(" is not a directory");
+    }
+}
+
+void does_file_exist(char *filename) {
+    Serial.println(SD.exists(filename) ? "File exists" : "File does not exist");
+}
+
+void output_file(char *filename) {
+    File f = SD.open(filename, FILE_READ);
+    Serial.print(filename);
+    Serial.print("\n");
+    if (f) {
+        while (f.available()) {
+            Serial.print(char(f.read()));
+        }
+        Serial.print("\n");
+    } else {
+        Serial.println("File does not exist");
+    }
+}
+
+void display_file(char *filename) {
+    Serial.println("NOT IMPLEMENTED");
+}
+
 void setup() {
   // set pin-modes
   pinMode(TFT_RST, OUTPUT);
   pinMode(TFT_DC, OUTPUT);
   pinMode(TFT_CS, OUTPUT);
+    pinMode(SD_CS, OUTPUT);
   #if defined(__AVR_ATmega2560__)
      pinMode(SS_SLAVE, OUTPUT);
   #endif
@@ -549,7 +593,16 @@ void setup() {
     simple_timer.disable(timer5);
   #endif
 
-  Serial.println("\nSetup finished\n");
+  Serial.println("\nTFT Setup finished\n");
+    Serial.println("\nStarting SD Card setup\n");
+    delay(100);
+    int err = SD.begin(SD_CS);
+    if (err != 1) {
+        Serial.println("ERROR: SD card initialization failed");
+        return;
+    }
+
+    Serial.println("SD Setup finished");
 }
 
 void start_student_id_demo() {
@@ -593,6 +646,10 @@ void print_help() {
     Serial.println("  runRBD | runs rotating bar demo");
     Serial.println("  runID | runs student id demo");
     Serial.println("  stop | stops all running demos");
+    Serial.println("  ls <DIR_NAME> | list directory to serial");
+    Serial.println("  exist <FILE_NAME> | print if file exists to serial");
+    Serial.println("  catSer <FILE_NAME> | print file content to serial");
+    Serial.println("  catTFT <FILE_NAME> | display file on TFT screen");
 }
 
 char input[64] = "";
@@ -615,6 +672,18 @@ void parse_string() {
     } else if (strcmp(ptr, "stop") == 0) {
         stop_student_id_demo();
         stop_rotbar_demo();
+    } else if (strcmp(ptr, "ls") == 0) {
+        char *param = strtok(NULL, " ");
+        list_directory(param);
+    } else if (strcmp(ptr, "exist") == 0) {
+        char *param = strtok(NULL, " ");
+        does_file_exist(param);
+    } else if (strcmp(ptr, "catSer") == 0) {
+        char *param = strtok(NULL, " ");
+        output_file(param);
+    } else if (strcmp(ptr, "catTFT") == 0) {
+        char *param = strtok(NULL, " ");
+        display_file(param);
     } else {
         Serial.println("Invalid command " + command);
         print_help();
