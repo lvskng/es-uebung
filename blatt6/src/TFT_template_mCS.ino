@@ -5,7 +5,7 @@
 
 #include <SPI.h>
 #include <string.h>
-#define __AVR_ATmega2560__ 1
+//#define __AVR_ATmega2560__ 1
 #if defined(__AVR_ATmega2560__)
   #include <SimpleTimer.h>
   #warning "__AVR_ATmega2560__ is defined"
@@ -38,8 +38,8 @@
 #define SPI_DEFAULT_FREQ   1e6      ///< Default SPI data clock frequency
 SPISettings settingsTFT(SPI_DEFAULT_FREQ, MSBFIRST, SPI_MODE0);
 
-const int FB_X = 92;
-const int FB_Y = 64;           //VCOM Voltage setting
+const int FB_X = 129;
+const int FB_Y = 162;           //VCOM Voltage setting
 
 uint8_t framebuffer[FB_X][FB_Y];
 
@@ -321,21 +321,20 @@ void write_framebuffer(uint8_t xs, uint8_t xe, uint8_t ys, uint8_t ye) {
 }
 
 int print_char(uint8_t x, uint8_t y, char value, uint8_t fgColor, uint8_t bgColor) {
-    //TODO manipulated for simulator
-    if ((x+6) > FB_Y || (y+8) > FB_X) {
+    if (false && (x+6) > FB_Y || (y+8) > FB_X) {
         return -1;
     }
     for (uint8_t i=0; i<6; i++) {
         for (uint8_t j=0; j<8; j++) {
             uint8_t pixel = font[value - 32][i] & (0b00000001 << (7 - j));
-            setPixel(x + i, y + j, pixel ? fgColor : bgColor);
+            setPixel(y + j, x + i, pixel ? fgColor : bgColor);
         }
     }
     return 0;
 }
 
 int print_string(uint8_t x, uint8_t y, char *c_str, uint8_t fgColor, uint8_t bgColor) {
-    if (x + (strlen(c_str) * 6) > FB_Y || y + 8 > FB_X) return -1;
+    if (false && x + (strlen(c_str) * 6) > FB_Y || y + 8 > FB_X) return -1;
     for (uint8_t i=0; i<strlen(c_str); i++) {
         print_char(x + (i * 6), y, c_str[i], fgColor, bgColor);
     }
@@ -356,10 +355,10 @@ DueTimer Timer5;
 
 
 char * names[][2] {
-  //{"Philip Hedram", "7503095"},
-  //{"Lovis Koenig", "7056609"}
-  {"PH", "01"},
-  {"LK", "02"}
+  {"Philip Hedram", "7503095"},
+  {"Lovis Koenig", "7056609"}
+  //{"PH", "01"},
+  //{"LK", "02"}
 };
 
 uint8_t names_ptr = 0;
@@ -408,14 +407,14 @@ void draw_slash(uint8_t x, uint8_t y, uint8_t diameter, uint8_t color, uint8_t r
 }
 
 void rotbar_timer_routine() {
-    draw_slash(50, 10, 10, bgColor, rotation_state);
-    draw_slash(50, 10, 10, fgColor, (rotation_state+1) % 4);
-    write_framebuffer(50 + FIRST_COL, FIRST_COL + 60, 10 + FIRST_ROW, FIRST_ROW + 20);
+    draw_slash(39, 55, 50, bgColor, rotation_state);
+    draw_slash(39, 55, 50, fgColor, (rotation_state+1) % 4);
+    write_framebuffer(39 + FIRST_COL, FIRST_COL + 89, 55 + FIRST_ROW, FIRST_ROW + 105);
     rotation_state = (rotation_state + 1) % 4;
 }
 
-const int x_pos_offset = 20;
-const int y_pos = 1;
+const int x_pos_offset = 80;
+const int y_pos = 64;
 
 void studid_timer_routine() {
     if (timer_counter == 4 || USE_ST) {
